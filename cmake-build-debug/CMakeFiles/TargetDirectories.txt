@@ -1,0 +1,11 @@
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/bank/CMakeFiles/bank.dir
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/bank/CMakeFiles/edit_cache.dir
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/bank/CMakeFiles/rebuild_cache.dir
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/exchange/CMakeFiles/exchange.dir
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/exchange/CMakeFiles/edit_cache.dir
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/exchange/CMakeFiles/rebuild_cache.dir
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/client/CMakeFiles/client.dir
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/client/CMakeFiles/edit_cache.dir
+/home/behrazwslubuntu/os_project/os_project/cmake-build-debug/client/CMakeFiles/rebuild_cache.dir

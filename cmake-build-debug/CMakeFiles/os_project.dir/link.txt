@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/os_project.dir/main.cpp.o CMakeFiles/os_project.dir/bank/bank.cpp.o CMakeFiles/os_project.dir/client/client.cpp.o CMakeFiles/os_project.dir/exchange/exchange.cpp.o -o os_project 
