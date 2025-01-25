@@ -9,12 +9,15 @@
 #include <mutex>
 #include <unordered_map>
 #include <vector>
+#include <sstream>
 #include "../constant_and_types.h"
+#include "../ThreadSafeBuffer.h"
 using namespace std;
-unordered_map<int,EntityInfo> clients;
-unordered_map<int,EntityInfo> exchanges;
+unordered_map<int,ClientInfo> clients;
+unordered_map<int,ExchangeInfo> exchanges;
+ThreadSafeBuffer<string> input_buffer(1000,"bank_input_buffer",false);
 
-int main() {
+[[noreturn]] void bank_reader() {
     int sock_fd;
     char buffer[BUFFER_SIZE];
     struct sockaddr_in server_addr{}, client_addr{};
@@ -53,16 +56,63 @@ int main() {
         inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
         int client_port = ntohs(client_addr.sin_port);
 
-        std::string message(buffer);
+        string message(buffer);
+        if (input_buffer.is_full()) {
+            continue;
+        }
+        input_buffer.add_drop(message);
+        // cout << client_ip << " " << client_port << " " << message << endl;
 
-        // extract message -->
+
     }
 
     close(sock_fd);
+}
+void request_handler() {
+    while (true) {
+        if  (input_buffer.is_empty()) {
+            continue;
+        }
+        string request = input_buffer.remove_no_wait();
+        // cout << request << endl;
+        istringstream iss(request);
+        string data;
+        iss >> data;
+        if (data == "INIT_CLIENT") {
+            ClientInfo client;
+            iss >> data; // name
+            client.name = data;
+            iss >> data; // port
+            client.port = stoi(data);
+            clients[client.port] = client;
+            cout << "Client " << client.name << " connected on port " << client.port << "\n";
+        }
+        else if (data == "INIT_EXCHANGE") {
+            ExchangeInfo exchange;
+            iss >> data; // name
+            exchange.name = data;
+            iss >> data; // port
+            exchange.port = stoi(data);
+            exchanges[exchange.port] = exchange;
+            cout << "Exchange " << exchange.name << " connected on port " << exchange.port << "\n";
+        }
 
 
-
-
-
+    }
+}
+int main() {
+    thread bank_reader_thread(bank_reader);
+    thread bank_request_handler(request_handler);
+    bank_reader_thread.join();
+    bank_request_handler.join();
+    /* stringstream s ;
+    // string x;
+    //
+    // s <<"123 456" ;
+    // istringstream ss(s.str());
+    // ss >> x;
+    // cout << x << endl;
+    // ss >> x;
+    // cout << x << endl;*/
     return 0;
 }

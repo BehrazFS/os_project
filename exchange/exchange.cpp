@@ -11,37 +11,72 @@
 #include "../constant_and_types.h"
 
 using namespace std;
+
 int main() {
     string name;
     cout << "Enter your exchange name: ";
     cin >> name;
     int sock_fd;
-    char buffer[BUFFER_SIZE];
-    struct sockaddr_in server_addr{};
-
+    struct sockaddr_in addr{};
     // Create a UDP socket
-    if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+    sock_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock_fd < 0) {
         perror("Exchange socket creation failed");
         exit(EXIT_FAILURE);
     }
 
+    // Configure the address structure with port 0 (system assigns a port)
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(0); // OS assigns an available port
+
+    // Bind the socket
+    if (bind(sock_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        perror("Exchange bind failed");
+        close(sock_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    // Retrieve the assigned port
+    socklen_t addr_len = sizeof(addr);
+    if (getsockname(sock_fd, (struct sockaddr *)&addr, &addr_len) < 0) {
+        perror("Exchange retrieve port failed");
+        close(sock_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    int assigned_port = ntohs(addr.sin_port);
+
+    int bank_socket_fd;
+    char buffer[BUFFER_SIZE];
+    struct sockaddr_in bank_server_addr{};
+
+    // Create a UDP socket
+    if ((bank_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Exchange bank socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
     // Configure server address
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(BANK_PORT);
-    inet_pton(AF_INET, server_ip.c_str(), &server_addr.sin_addr);
+    memset(&bank_server_addr, 0, sizeof(bank_server_addr));
+    bank_server_addr.sin_family = AF_INET;
+    bank_server_addr.sin_port = htons(BANK_PORT);
+    inet_pton(AF_INET, server_ip.c_str(), &bank_server_addr.sin_addr);
+
 
     // Send registration message
-    sendto(sock_fd, name.c_str(), name.size(), 0, (const struct sockaddr *)&server_addr, sizeof(server_addr));
-
+    string message = "INIT_EXCHANGE " + name + " " + to_string(assigned_port);
+    sendto(sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&bank_server_addr, sizeof(bank_server_addr));
+    //cout << "Listening on assigned port: " << assigned_port << std::endl;
     // Receive acknowledgment
-    socklen_t len = sizeof(server_addr);
-    long long int n = recvfrom(sock_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&server_addr, &len);
+    socklen_t len = sizeof(bank_server_addr);
+    long long int n = recvfrom(sock_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&bank_server_addr, &len);
     if (n < 0) {
         perror("Exchange receive failed");
     } else {
         buffer[n] = '\0';
-        std::cout << "Bank response: " << buffer << "\n";
+        cout << "Bank response: " << buffer << "\n";
     }
 
     close(sock_fd);
