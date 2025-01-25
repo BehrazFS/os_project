@@ -6,12 +6,20 @@
 using namespace std;
 #ifndef CONSTANT_AND_TYPES_H
 #define CONSTANT_AND_TYPES_H
-constexpr int BUFFER_SIZE = 1024;
+constexpr int BUFFER_SIZE = 4096;
 constexpr int BANK_PORT = 9999;
 constexpr string server_ip = "127.0.0.1";
 struct Wallet {
     long long int balance = 0;
     unordered_map<string, int> cryptocurrencies;
+    string pars_string() {
+        string ret = "";
+        ret += to_string(balance) + " ";
+        for (auto &it : cryptocurrencies) {
+            ret += it.first + " " + to_string(it.second) + " ";
+        }
+        return ret;
+    }
 };
 struct ClientInfo {
     string name;

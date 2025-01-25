@@ -9,7 +9,8 @@
 #include <thread>
 #include <mutex>
 #include "../constant_and_types.h"
-
+#include "../ThreadSafeBuffer.h"
+#include "../HashFunction.h"
 using namespace std;
 
 int main() {
@@ -21,7 +22,7 @@ int main() {
     // Create a UDP socket
     sock_fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock_fd < 0) {
-        perror("Exchange socket creation failed");
+        cout << "Exchange socket creation failed"<<endl;
         exit(EXIT_FAILURE);
     }
 
@@ -33,7 +34,7 @@ int main() {
 
     // Bind the socket
     if (bind(sock_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        perror("Exchange bind failed");
+        cout << "Exchange bind failed"<<endl;
         close(sock_fd);
         exit(EXIT_FAILURE);
     }
@@ -41,7 +42,7 @@ int main() {
     // Retrieve the assigned port
     socklen_t addr_len = sizeof(addr);
     if (getsockname(sock_fd, (struct sockaddr *)&addr, &addr_len) < 0) {
-        perror("Exchange retrieve port failed");
+        cout << "Exchange retrieve port failed"<<endl;
         close(sock_fd);
         exit(EXIT_FAILURE);
     }
@@ -54,7 +55,7 @@ int main() {
 
     // Create a UDP socket
     if ((bank_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("Exchange bank socket creation failed");
+        cout << "Exchange bank socket creation failed"<<endl;
         exit(EXIT_FAILURE);
     }
 
@@ -67,13 +68,14 @@ int main() {
 
     // Send registration message
     string message = "INIT_EXCHANGE " + name + " " + to_string(assigned_port);
+    message = simpleHash(message) + " " + message;
     sendto(sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&bank_server_addr, sizeof(bank_server_addr));
     //cout << "Listening on assigned port: " << assigned_port << std::endl;
     // Receive acknowledgment
     socklen_t len = sizeof(bank_server_addr);
     long long int n = recvfrom(sock_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&bank_server_addr, &len);
     if (n < 0) {
-        perror("Exchange receive failed");
+        cout << "Exchange receive failed"<<endl;
     } else {
         buffer[n] = '\0';
         cout << "Bank response: " << buffer << "\n";
