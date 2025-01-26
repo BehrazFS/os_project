@@ -211,6 +211,35 @@ void request_handler() {
             sendto(client_sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&client_server_addr, sizeof(client_server_addr));
             close(client_sock_fd);
         }
+        else if (data == "ADD_NEW_CRYPTO") {
+            ExchangeInfo exchange;
+            iss >> data; // name
+            string crypto_name = data;
+            iss >> data; // port
+            int exchange_port = stoi(data);
+            string message = "ADDED_NEW_CRYPTO ";
+            if (cryptocurrencies.contains(crypto_name)) {
+                message += "Failed ";
+                cout << "An exchange failed to create crypto : "+ crypto_name + " on port " << exchange_port << "\n";
+            }else {
+                message += "Success " + crypto_name;
+                cout << "An exchange created crypto : "+ crypto_name + " on port " << exchange_port << "\n";
+                cryptocurrencies.insert(crypto_name);
+            }
+            struct sockaddr_in exchange_server_addr{};
+            int exchange_sock_fd;
+            if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                cout << "Bank exchange socket creation failed"<<endl;
+                exit(EXIT_FAILURE);
+            }
+            memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+            exchange_server_addr.sin_family = AF_INET;
+            exchange_server_addr.sin_port = htons(exchange_port);
+            inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+            message = simpleHash(message) + " " + message;
+            sendto(exchange_sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&exchange_server_addr, sizeof(exchange_server_addr));
+            close(exchange_sock_fd);
+        }
     }
 }
 int main() {

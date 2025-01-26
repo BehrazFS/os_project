@@ -27,6 +27,7 @@ struct SafeItem {
     string cryptocurrency;
     double price = 0;
     string state = "preorder";
+    chrono::time_point<chrono::system_clock> creation_time;;
 };
 struct Safe {
     long long int balance = 0;
