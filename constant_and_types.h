@@ -21,6 +21,17 @@ struct Wallet {
         return ret;
     }
 };
+
+struct SafeItem {
+    int count = 0;
+    string cryptocurrency;
+    double price = 0;
+    string state = "preorder";
+};
+struct Safe {
+    long long int balance = 0;
+    unordered_map<string, SafeItem> cryptocurrencies;
+};
 struct ClientInfo {
     string name;
     int port;

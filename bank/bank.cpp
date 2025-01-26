@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <thread>
 #include <mutex>
+#include <set>
 #include <unordered_map>
 #include <vector>
 #include <sstream>
@@ -20,6 +21,7 @@ ThreadSafeBuffer<string> input_buffer(1000,"bank_input_buffer",false);
 constexpr int max_increase_amount = 1000;
 constexpr int page_size = 10;
 vector<string> history;
+set<string> cryptocurrencies;
 [[noreturn]] void bank_reader() {
     int sock_fd;
     char buffer[BUFFER_SIZE];

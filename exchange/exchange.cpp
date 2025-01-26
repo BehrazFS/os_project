@@ -12,13 +12,13 @@
 #include "../ThreadSafeBuffer.h"
 #include "../HashFunction.h"
 using namespace std;
-
-int main() {
-    string name;
-    cout << "Enter your exchange name: ";
-    cin >> name;
+string name;
+int assigned_port;
+ThreadSafeBuffer<string> input_buffer(1000,"bank_input_buffer",false);
+Safe safe;
+void exchange_reader() {
     int sock_fd;
-    struct sockaddr_in addr{};
+    struct sockaddr_in addr{}, client_addr{};
     // Create a UDP socket
     sock_fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock_fd < 0) {
@@ -47,7 +47,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    int assigned_port = ntohs(addr.sin_port);
+    assigned_port = ntohs(addr.sin_port);
 
     int bank_socket_fd;
     char buffer[BUFFER_SIZE];
@@ -70,18 +70,67 @@ int main() {
     string message = "INIT_EXCHANGE " + name + " " + to_string(assigned_port);
     message = simpleHash(message) + " " + message;
     sendto(sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&bank_server_addr, sizeof(bank_server_addr));
-    //cout << "Listening on assigned port: " << assigned_port << std::endl;
-    // Receive acknowledgment
-    socklen_t len = sizeof(bank_server_addr);
-    long long int n = recvfrom(sock_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&bank_server_addr, &len);
-    if (n < 0) {
-        cout << "Exchange receive failed"<<endl;
-    } else {
+    cout << "Exchange is listening on assigned port: " << assigned_port << endl;
+    while(true) {
+        socklen_t len = sizeof(client_addr);
+        long long int n = recvfrom(sock_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *) &client_addr, &len);
+        if (n < 0) {
+            cout << "EXchange receive failed"<<endl;
+            continue;
+        }
+
         buffer[n] = '\0';
-        cout << "Bank response: " << buffer << "\n";
+
+        // Extract ip and port of client
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
+        int client_port = ntohs(client_addr.sin_port);
+
+        string message2(buffer);
+        if (input_buffer.is_full()) {
+            continue;
+        }
+        input_buffer.add_drop(message2);
+        // cout << client_ip << " " << client_port << " " << message << endl;
+
+
     }
 
     close(sock_fd);
+}
+void request_handler() {
+
+}
+void new_crypto_handler() {
+    while (true) {
+        cout << "Enter new crypto name: ";
+        cin >> name;
+
+    }
+}
+int main() {
+
+    cout << "Enter your exchange name: ";
+    cin >> name;
+    thread exchange_reader_thread(exchange_reader);
+    thread exchange_request_handler(request_handler);
+    thread new_crypto_thread(new_crypto_handler);
+    exchange_reader_thread.join();
+    exchange_request_handler.join();
+    exchange_request_handler.join();
+    /*
+    // Receive acknowledgment
+    // socklen_t len = sizeof(bank_server_addr);
+    // long long int n = recvfrom(sock_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&bank_server_addr, &len);
+    // if (n < 0) {
+    //     cout << "Exchange receive failed"<<endl;
+    // } else {
+    //     buffer[n] = '\0';
+    //     cout << "Bank response: " << buffer << "\n";
+    // }
+    //
+    // close(sock_fd);
+    */
 
 
 
