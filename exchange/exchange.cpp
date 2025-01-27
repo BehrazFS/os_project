@@ -606,20 +606,6 @@ int main() {
     exchange_reader_thread.join();
     exchange_request_handler.join();
     exchange_request_handler.join();
-    /*
-    // Receive acknowledgment
-    // socklen_t len = sizeof(bank_server_addr);
-    // long long int n = recvfrom(sock_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&bank_server_addr, &len);
-    // if (n < 0) {
-    //     cout << "Exchange receive failed"<<endl;
-    // } else {
-    //     buffer[n] = '\0';
-    //     cout << "Bank response: " << buffer << "\n";
-    // }
-    //
-    // close(sock_fd);
-    */
-
 
     return 0;
 }
