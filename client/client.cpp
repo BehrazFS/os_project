@@ -75,8 +75,25 @@ void buy_cryptocurrency(int c_socket_fd ,int sock_fd, sockaddr_in sock_in) {
         cout << "Exchange response: " << buffer << "\n";
     }
 }
-void sell_cryptocurrency(int sock_fd, sockaddr_in sock_in) {
-
+void sell_cryptocurrency(int c_socket_fd ,int sock_fd, sockaddr_in sock_in) {
+    string cryptocurrency_name;
+    cout << "Enter cryptocurrency name: ";
+    cin >> cryptocurrency_name;
+    int amount;
+    cout << "Enter amount : ";
+    cin >> amount;
+    string message = "SELL_CRYPTO_CLIENT " + to_string(assigned_port) + " " + cryptocurrency_name + " " + to_string(amount);
+    message = simpleHash(message) + " " + message;
+    sendto(sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&sock_in, sizeof(sock_in));
+    socklen_t len = sizeof(sock_in);
+    char buffer[BUFFER_SIZE];
+    long long int n = recvfrom(c_socket_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&sock_in, &len);
+    if (n < 0) {
+        cout << (message + " Receive failed")<<endl;
+    } else {
+        buffer[n] = '\0';
+        cout << "Exchange response: " << buffer << "\n";
+    }
 }
 void view_wallet_balance(int c_socket_fd ,int sock_fd, sockaddr_in sock_in) {
     string message = "VIEW_BALANCE_CLIENT " + to_string(assigned_port);
@@ -227,21 +244,21 @@ int main() {
             buy_cryptocurrency(sock_fd,exchange_sock_fd, exchange_server_addr);
             close(exchange_sock_fd);
         } else if (choice == "3") {
-            // int exchange_port;
-            // cout << "Enter exchange port number: ";
-            // cin >> exchange_port;
-            // struct sockaddr_in exchange_server_addr{};
-            // int exchange_sock_fd;
-            // if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-            //     cout << "Client exchange socket creation failed"<<endl;
-            //     exit(EXIT_FAILURE);
-            // }
-            // memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
-            // exchange_server_addr.sin_family = AF_INET;
-            // exchange_server_addr.sin_port = htons(exchange_port);
-            // inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
-            // sell_cryptocurrency(exchange_sock_fd, exchange_server_addr);
-            // close(exchange_sock_fd);
+            int exchange_port;
+            cout << "Enter exchange port number: ";
+            cin >> exchange_port;
+            struct sockaddr_in exchange_server_addr{};
+            int exchange_sock_fd;
+            if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                cout << "Client exchange socket creation failed"<<endl;
+                exit(EXIT_FAILURE);
+            }
+            memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+            exchange_server_addr.sin_family = AF_INET;
+            exchange_server_addr.sin_port = htons(exchange_port);
+            inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+            sell_cryptocurrency(sock_fd,exchange_sock_fd, exchange_server_addr);
+            close(exchange_sock_fd);
         } else if (choice == "4") {
             view_wallet_balance(sock_fd,bank_socket_fd, bank_server_addr);
         } else if (choice == "5") {

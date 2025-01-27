@@ -17,11 +17,12 @@
 using namespace std;
 unordered_map<int,ClientInfo> clients;
 unordered_map<int,ExchangeInfo> exchanges;
-ThreadSafeBuffer<string> input_buffer(1000,"bank_input_buffer",false);
+ThreadSafeBuffer<string> input_buffer(10000,"bank_input_buffer",false);
 constexpr int max_increase_amount = 1000;
 constexpr int page_size = 10;
+auto timer = chrono::system_clock::now();
 vector<string> history;
-set<string> cryptocurrencies;
+unordered_map<string,SafeItem> cryptocurrencies;
 [[noreturn]] void bank_reader() {
     int sock_fd;
     char buffer[BUFFER_SIZE];
@@ -75,6 +76,41 @@ set<string> cryptocurrencies;
 }
 void request_handler() {
     while (true) {
+        if (chrono::system_clock::now() - timer >= chrono::seconds(120)) {
+            unordered_map<string,int> count;
+            unordered_map<string,double> new_price;
+            for (auto & it : clients) {
+                for (auto & it2 : it.second.wallet.cryptocurrencies) {
+                    count[it2.first]+=it2.second;
+                }
+            }
+            for (auto & it : cryptocurrencies) {
+                if (it.second.state == "released") {
+                    new_price[it.first] = it.second.price + ((double)count[it.first]/it.second.init_count) * 100;
+                }
+            }
+            for (auto & it : cryptocurrencies) {
+                if (it.second.state == "released") {
+                    string message = "SYNC " + it.first + " " + to_string(new_price[it.first]);
+                    for ( auto & exchange1 : exchanges) {
+                        struct sockaddr_in exchange_server_addr{};
+                        int exchange_sock_fd;
+                        if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                            cout << "Bank exchange socket creation failed"<<endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+                        exchange_server_addr.sin_family = AF_INET;
+                        exchange_server_addr.sin_port = htons(exchange1.first);
+                        inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+                        message = simpleHash(message) + " " + message;
+                        sendto(exchange_sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&exchange_server_addr, sizeof(exchange_server_addr));
+                        close(exchange_sock_fd);
+                    }
+                }
+            }
+            timer = chrono::system_clock::now();
+        }
         if  (input_buffer.is_empty()) {
             continue;
         }
@@ -105,6 +141,26 @@ void request_handler() {
             exchange.port = stoi(data);
             exchanges[exchange.port] = exchange;
             cout << "Exchange " << exchange.name << " connected on port " << exchange.port << "\n";
+            for (auto &crypto_name : cryptocurrencies) {
+            string message = "DO_RELEASE_CRYPTO " + crypto_name.first +" "+ to_string(crypto_name.second.price) + " "  +to_string(crypto_name.second.init_count);
+                if (crypto_name.second.state == "released") {
+                    for ( auto & exchange1 : exchanges) {
+                        struct sockaddr_in exchange_server_addr{};
+                        int exchange_sock_fd;
+                        if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                            cout << "Bank exchange socket creation failed"<<endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+                        exchange_server_addr.sin_family = AF_INET;
+                        exchange_server_addr.sin_port = htons(exchange1.first);
+                        inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+                        message = simpleHash(message) + " " + message;
+                        sendto(exchange_sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&exchange_server_addr, sizeof(exchange_server_addr));
+                        close(exchange_sock_fd);
+                    }
+                }
+            }
         }
         else if (data == "VIEW_BALANCE_CLIENT") {
             iss >> data; // port
@@ -224,7 +280,9 @@ void request_handler() {
             }else {
                 message += "Success " + crypto_name;
                 cout << "An exchange created crypto : "+ crypto_name + " on port " << exchange_port << "\n";
-                cryptocurrencies.insert(crypto_name);
+                SafeItem item;
+                item.state = "preorder";
+                cryptocurrencies[crypto_name] = item;
             }
             struct sockaddr_in exchange_server_addr{};
             int exchange_sock_fd;
@@ -240,8 +298,140 @@ void request_handler() {
             sendto(exchange_sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&exchange_server_addr, sizeof(exchange_server_addr));
             close(exchange_sock_fd);
         }
+        else if (data == "BUY_CRYPTO_CLIENT_CHECK") {
+            iss >> data; // name
+            string crypto_name = data;
+            iss >> data; // amount
+            int amount = stoi(data);
+            iss >> data;
+            double price = stod(data);
+            iss >> data;
+            int client_port = stoi(data);
+            iss >> data;
+            int exchange_port = stoi(data);
+            ClientInfo client = clients[client_port];
+            string message = "BUY_CRYPTO_CLIENT_CHECKED ";
+            if (client.wallet.balance >= price*amount) {
+                clients[client_port].wallet.balance -= price*amount;
+                clients[client_port].wallet.cryptocurrencies[crypto_name] += amount;
+                message += "Success ";
+            }
+            else {
+                message += "Failed ";
+            }
+
+            struct sockaddr_in exchange_server_addr{};
+            int exchange_sock_fd;
+            if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                cout << "Bank exchange socket creation failed"<<endl;
+                exit(EXIT_FAILURE);
+            }
+            message += crypto_name + " " + to_string(price*amount) + " " + to_string(amount) + " " + to_string(client_port);
+            memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+            exchange_server_addr.sin_family = AF_INET;
+            exchange_server_addr.sin_port = htons(exchange_port);
+            inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+            history.push_back("Bought " + crypto_name + " : " + to_string(amount) + " used : " + to_string(price*amount));
+            message = simpleHash(message) + " " + message;
+            sendto(exchange_sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&exchange_server_addr, sizeof(exchange_server_addr));
+            close(exchange_sock_fd);
+        }
+        else if (data == "RELEASE_CRYPTO") {
+            iss >> data;
+            string crypto_name = data;
+            iss >> data;
+            double price = stod(data);
+            iss >> data;
+            int init_count = stoi(data);
+            string message = "DO_RELEASE_CRYPTO " + crypto_name + " " + to_string(price) + " " + to_string(init_count);
+            cryptocurrencies[crypto_name].state = "released";
+            cryptocurrencies[crypto_name].price = price;
+            cryptocurrencies[crypto_name].init_count = init_count;
+            for ( auto & exchange : exchanges) {
+                struct sockaddr_in exchange_server_addr{};
+                int exchange_sock_fd;
+                if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                    cout << "Bank exchange socket creation failed"<<endl;
+                    exit(EXIT_FAILURE);
+                }
+                memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+                exchange_server_addr.sin_family = AF_INET;
+                exchange_server_addr.sin_port = htons(exchange.first);
+                inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+                message = simpleHash(message) + " " + message;
+                sendto(exchange_sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&exchange_server_addr, sizeof(exchange_server_addr));
+                close(exchange_sock_fd);
+
+            }
+
+        }else if (data == "SELL_CRYPTO_CLIENT_CHECK") {
+            iss >> data; // name
+            string crypto_name = data;
+            iss >> data; // amount
+            int amount = stoi(data);
+            iss >> data;
+            double price = stod(data);
+            iss >> data;
+            int client_port = stoi(data);
+            iss >> data;
+            int exchange_port = stoi(data);
+            ClientInfo client = clients[client_port];
+            string message = "SELL_CRYPTO_CLIENT_CHECKED ";
+            if (client.wallet.cryptocurrencies[crypto_name] >= amount) {
+                clients[client_port].wallet.cryptocurrencies[crypto_name] -= amount;
+                clients[client_port].wallet.balance += price*amount;
+                message += "Success ";
+            }
+            else {
+                message += "Failed ";
+            }
+
+            struct sockaddr_in exchange_server_addr{};
+            int exchange_sock_fd;
+            if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                cout << "Bank exchange socket creation failed"<<endl;
+                exit(EXIT_FAILURE);
+            }
+            message += crypto_name + " " + to_string(price*amount) + " " + to_string(amount) + " " + to_string(client_port);
+            memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+            exchange_server_addr.sin_family = AF_INET;
+            exchange_server_addr.sin_port = htons(exchange_port);
+            inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+            history.push_back("Sold " + crypto_name + " : " + to_string(amount) + " gained : " + to_string(price*amount) );
+            message = simpleHash(message) + " " + message;
+            sendto(exchange_sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&exchange_server_addr, sizeof(exchange_server_addr));
+            close(exchange_sock_fd);
+        }
+        else if (data == "BUY_CRYPTO_EXCHANGE_TO_BANK") {
+            iss >> data;
+            string crypto_name = data;
+            iss >> data; // port
+            int exchange_port = stoi(data);
+
+            struct sockaddr_in exchange_server_addr{};
+            int exchange_sock_fd;
+            if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                cout << "Bank client socket creation failed"<<endl;
+                exit(EXIT_FAILURE);
+            }
+            memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+            exchange_server_addr.sin_family = AF_INET;
+            exchange_server_addr.sin_port = htons(exchange_port);
+            inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+
+            cout << "An exchange viewed exchange list on port " << exchange_port << endl;
+            string message = "BUY_CRYPTO_EXCHANGE_TO_BANK_RESPONSE "  +crypto_name + " " + to_string(exchanges.size()) + " ";
+            for (auto &it : exchanges) {
+                if (exchange_port != it.first) {
+                    message += to_string(it.second.port) + " ";
+                }
+            }
+            sendto(exchange_sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&exchange_server_addr, sizeof(exchange_server_addr));
+            close(exchange_sock_fd);
+        }
     }
 }
+
 int main() {
     thread bank_reader_thread(bank_reader);
     thread bank_request_handler(request_handler);
