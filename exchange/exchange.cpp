@@ -209,11 +209,13 @@ void request_handler() {
                         bank_server_addr.sin_family = AF_INET;
                         bank_server_addr.sin_port = htons(BANK_PORT);
                         inet_pton(AF_INET, server_ip.c_str(), &bank_server_addr.sin_addr);
-                        string message2 = "BUY_CRYPTO_EXCHANGE_TO_BANK " + cyripto_name + " " + to_string(assigned_port);
+                        string message2 = "BUY_CRYPTO_EXCHANGE_TO_BANK " + cyripto_name + " " +
+                                          to_string(assigned_port);
                         message2 = simpleHash(message2) + " " + message2;
                         sendto(bank_sock_fd, message2.c_str(), message2.size(), 0,
                                (const struct sockaddr *) &bank_server_addr, sizeof(bank_server_addr));
                         close(bank_sock_fd);
+                        safe.cryptocurrencies[cyripto_name].buying = true;
                         cout << "exchange sent to bank for buying more" << endl;
                         cout << "exchange failed due to low crypto inventory(start buying)" << endl;
                     } else if (amount > si.count && si.state == "preorder") {
@@ -433,8 +435,7 @@ void request_handler() {
                    sizeof(client_server_addr));
             close(client_sock_fd);
             cout << "exchange sent to client(sold)" << endl;
-        }
-        else if (data == "SYNC") {
+        } else if (data == "SYNC") {
             string crypto_name;
             iss >> data;
             crypto_name = data;
@@ -442,22 +443,131 @@ void request_handler() {
             iss >> data;
             price = stod(data);
             safe.cryptocurrencies[crypto_name].price = price;
-            cout << "Exchange crypto : " +crypto_name + " synced : " + to_string(price) << endl;
-        }
-        else if (data == "BUY_CRYPTO_EXCHANGE_TO_BANK_RESPONSE") {
+            cout << "Exchange crypto : " + crypto_name + " synced : " + to_string(price) << endl;
+        } else if (data == "BUY_CRYPTO_EXCHANGE_TO_BANK_RESPONSE") {
             string crypto_name;
             iss >> data;
             crypto_name = data;
             int size;
             iss >> data;
             size = stoi(data);
-            for (int i = 0;i < size;i++) {
+            double max_price = safe.balance * 0.1;
+            for (int i = 0; i < size; i++) {
                 int port;
                 iss >> data;
                 port = stoi(data);
                 //sent to all exchanges
-
+                struct sockaddr_in exchange_server_addr{};
+                int exchange_sock_fd;
+                if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                    cout << "Exchange exchange socket creation failed" << endl;
+                    exit(EXIT_FAILURE);
+                }
+                memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+                exchange_server_addr.sin_family = AF_INET;
+                exchange_server_addr.sin_port = htons(port);
+                inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+                string message = "EXCHANGE_BUY_REQUEST " + crypto_name + " " + to_string(max_price) + " " + to_string(
+                                     assigned_port);
+                message = simpleHash(message) + " " + message;
+                sendto(exchange_sock_fd, message.c_str(), message.size(), 0,
+                       (const struct sockaddr *) &exchange_server_addr, sizeof(exchange_server_addr));
+                close(exchange_sock_fd);
+                cout << "exchange sent to exchanges a buy request on " + crypto_name<<endl;
             }
+        } else if (data == "EXCHANGE_BUY_REQUEST") {
+            string crypto_name;
+            iss >> data;
+            crypto_name = data;
+            double max_price;
+            iss >> data;
+            max_price = stod(data);
+            int exchange_port;
+            iss >> data;
+            exchange_port = stoi(data);
+            int amount = 0;
+            while (safe.cryptocurrencies[crypto_name].count > amount && safe.cryptocurrencies[crypto_name].price *
+                   amount < max_price) {
+                amount++;
+            }
+            if (amount > 0) {
+                struct sockaddr_in exchange_server_addr{};
+                int exchange_sock_fd;
+                if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                    cout << "Exchange exchange socket creation failed" << endl;
+                    exit(EXIT_FAILURE);
+                }
+                memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+                exchange_server_addr.sin_family = AF_INET;
+                exchange_server_addr.sin_port = htons(exchange_port);
+                inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+                string message = "EXCHANGE_BUY_RESPONSE " + crypto_name + " " + to_string(
+                                     safe.cryptocurrencies[crypto_name].price * amount) + " " + to_string(amount) + " "
+                                 + to_string(assigned_port);
+                message = simpleHash(message) + " " + message;
+                sendto(exchange_sock_fd, message.c_str(), message.size(), 0,
+                       (const struct sockaddr *) &exchange_server_addr, sizeof(exchange_server_addr));
+                close(exchange_sock_fd);
+                cout << "exchange sent to exchanges a buy response on " + crypto_name<<endl;
+            }
+        } else if (data == "EXCHANGE_BUY_RESPONSE") {
+            string crypto_name;
+            iss >> data;
+            crypto_name = data;
+            double money;
+            iss >> data;
+            money = stod(data);
+            int amount;
+            iss >> data;
+            amount = stoi(data);
+            int exchange_port;
+            iss >> data;
+            exchange_port = stoi(data);
+            if (safe.cryptocurrencies[crypto_name].buying) {
+                safe.cryptocurrencies[crypto_name].buying = false;
+                if (0.05 * safe.cryptocurrencies[crypto_name].init_count <= amount) {
+                    safe.cryptocurrencies[crypto_name].price *= 1.03;
+                }
+                safe.balance -= money;
+                safe.cryptocurrencies[crypto_name].count += amount;
+                struct sockaddr_in exchange_server_addr{};
+                int exchange_sock_fd;
+                if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+                    cout << "Exchange exchange socket creation failed" << endl;
+                    exit(EXIT_FAILURE);
+                }
+                memset(&exchange_server_addr, 0, sizeof(exchange_server_addr));
+                exchange_server_addr.sin_family = AF_INET;
+                exchange_server_addr.sin_port = htons(exchange_port);
+                inet_pton(AF_INET, server_ip.c_str(), &exchange_server_addr.sin_addr);
+                string message = "EXCHANGE_BOUGHT_RESPONSE " + crypto_name + " " + to_string(
+                                     safe.cryptocurrencies[crypto_name].price * amount) + " " + to_string(amount) + " "
+                                 + to_string(assigned_port);
+                message = simpleHash(message) + " " + message;
+                sendto(exchange_sock_fd, message.c_str(), message.size(), 0,
+                       (const struct sockaddr *) &exchange_server_addr, sizeof(exchange_server_addr));
+                close(exchange_sock_fd);
+                cout << "exchange sent to exchanges a bought response on " + crypto_name<<endl;
+            }
+        } else if (data == "EXCHANGE_BOUGHT_RESPONSE") {
+            string crypto_name;
+            iss >> data;
+            crypto_name = data;
+            double money;
+            iss >> data;
+            money = stod(data);
+            int amount;
+            iss >> data;
+            amount = stoi(data);
+            int exchange_port;
+            iss >> data;
+            exchange_port = stoi(data);
+            if (0.03 * safe.cryptocurrencies[crypto_name].count <= amount) {
+                safe.cryptocurrencies[crypto_name].price *= 0.98;
+            }
+            safe.balance += money;
+            safe.cryptocurrencies[crypto_name].count -= amount;
+            cout << "exchange sent to exchanges a transaction complited on " + crypto_name<<endl;
         }
     }
 }

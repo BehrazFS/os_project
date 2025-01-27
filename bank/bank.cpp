@@ -91,8 +91,8 @@ void request_handler() {
             }
             for (auto & it : cryptocurrencies) {
                 if (it.second.state == "released") {
-                    string message = "SYNC " + it.first + " " + to_string(new_price[it.first]);
                     for ( auto & exchange1 : exchanges) {
+                        string message = "SYNC " + it.first + " " + to_string(new_price[it.first]);
                         struct sockaddr_in exchange_server_addr{};
                         int exchange_sock_fd;
                         if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -142,9 +142,10 @@ void request_handler() {
             exchanges[exchange.port] = exchange;
             cout << "Exchange " << exchange.name << " connected on port " << exchange.port << "\n";
             for (auto &crypto_name : cryptocurrencies) {
-            string message = "DO_RELEASE_CRYPTO " + crypto_name.first +" "+ to_string(crypto_name.second.price) + " "  +to_string(crypto_name.second.init_count);
+
                 if (crypto_name.second.state == "released") {
                     for ( auto & exchange1 : exchanges) {
+                        string message = "DO_RELEASE_CRYPTO " + crypto_name.first +" "+ to_string(crypto_name.second.price) + " "  +to_string(crypto_name.second.init_count);
                         struct sockaddr_in exchange_server_addr{};
                         int exchange_sock_fd;
                         if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -343,11 +344,11 @@ void request_handler() {
             double price = stod(data);
             iss >> data;
             int init_count = stoi(data);
-            string message = "DO_RELEASE_CRYPTO " + crypto_name + " " + to_string(price) + " " + to_string(init_count);
             cryptocurrencies[crypto_name].state = "released";
             cryptocurrencies[crypto_name].price = price;
             cryptocurrencies[crypto_name].init_count = init_count;
             for ( auto & exchange : exchanges) {
+                string message = "DO_RELEASE_CRYPTO " + crypto_name + " " + to_string(price) + " " + to_string(init_count);
                 struct sockaddr_in exchange_server_addr{};
                 int exchange_sock_fd;
                 if ((exchange_sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -426,6 +427,7 @@ void request_handler() {
                     message += to_string(it.second.port) + " ";
                 }
             }
+            message = simpleHash(message) + " " + message;
             sendto(exchange_sock_fd, message.c_str(), message.size(), 0, (const struct sockaddr *)&exchange_server_addr, sizeof(exchange_server_addr));
             close(exchange_sock_fd);
         }

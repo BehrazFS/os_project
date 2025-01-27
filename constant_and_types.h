@@ -23,6 +23,7 @@ struct Wallet {
 };
 
 struct SafeItem {
+    bool buying = false;
     int count = 0;
     int init_count = 0;
     string cryptocurrency;
