@@ -13,7 +13,7 @@ Bank: Acts as a centralized fund manager, validating and processing deposit requ
 
 All communications are handled using UDP sockets, with each entity bound to a unique port and able to send/receive plain-text messages following a defined protocol.
 
-#Team members:
+# Team members:
 
 https://github.com/BehrazFS <br>
 https://github.com/RozhinaLatifi
